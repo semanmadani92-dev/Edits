@@ -37,6 +37,8 @@ def get(url, timeout=120):
 
 
 def category(name):
+    if re.search(r"KEY_ART|Promotional|Wallpaper", name, re.I):
+        return "key_art"
     if re.search(r"MENU_Load|loading_screen", name, re.I):
         return "loading_screens"
     if re.search(r"concept|_art\.", name, re.I):

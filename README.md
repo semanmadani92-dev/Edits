@@ -9,7 +9,8 @@
 - **Flash and crossfade** on each cut (`--flash`, `--xfade`)
 - **Shake**: a jolt with a little rotation on every beat, harder on louder beats (`--shake`, try 0.5 to 1.5)
 - **Glitch** on strong beats: RGB split, torn horizontal slices, colour blocks and scanlines (`--glitch`, `--glitch-threshold`)
-- **Smart cutting**: cut only on beats above a set strength, with a minimum shot length, so quiet intros get longer shots and the drop cuts faster (`--cut-threshold`, `--min-shot`)
+- **Smart cutting**: cut only on beats above a set strength, with a minimum shot length, so quiet intros get longer shots and the drop cuts faster (`--cut-threshold`, `--min-shot`, `--min-shot-quiet`)
+- **`--dry-run`** prints the shot list (when each cut happens and which image it shows) without rendering
 - **`--style dark-fantasy`**: muted gold colour grade, vignette, film grain, floating embers that flare on the beat, cinematic black bars and fades. It's tuned for Elden Ring and soulslike edits
 
 ## Setup
@@ -36,6 +37,12 @@ examples/dark_fantasy/make_edit.sh song.mp3 my_clips/       # your own song + ga
 - The finished demo is in `renders/elden_style_edit.mp4`.
 
 For a real edit, use your own gameplay recordings or screenshots, and a song you have the rights to use.
+
+## Elden Ring edit (official art + CC0 song)
+```
+python getimages.py                       # downloads ~300 official Elden Ring pictures into images/ (not committed)
+examples/elden_ring/make_edit.sh          # renders renders/elden_ring_edit.mp4
+```
 
 ## Related projects
 - [scherroman/mugen](https://github.com/scherroman/mugen): rhythm-based music video generator (moviepy + librosa)

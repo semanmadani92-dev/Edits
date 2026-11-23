@@ -26,12 +26,13 @@ VID_EXT = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v", ".gif"}
 def detect_beats(audio, start, duration):
     y, sr = librosa.load(audio, sr=22050, offset=start, duration=duration, mono=True)
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-    tempo, frames = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr)
+    tempo, frames = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr, trim=False)
     times = librosa.frames_to_time(frames, sr=sr)
     # beat strength (normalised) — used to scale the zoom punch
     strength = onset_env[frames] if len(frames) else np.array([])
     if len(strength):
-        strength = strength / (strength.max() + 1e-9)
+        # scale by a typical loud beat (90th pct), so one huge hit doesn't flatten the rest
+        strength = np.clip(strength / (np.percentile(strength, 90) + 1e-9), 0, 1)
     return float(np.atleast_1d(tempo)[0]), times, strength, len(y) / sr
 
 
@@ -192,11 +193,14 @@ def main():
     ap.add_argument("--cut-threshold", type=float, default=0.0,
                     help="only cut on beats with strength >= this (0-1): quiet parts get longer shots")
     ap.add_argument("--min-shot", type=float, default=0.0, help="minimum shot length (s)")
+    ap.add_argument("--min-shot-quiet", type=float, default=0.0,
+                    help="longer minimum shot for quiet beats (strength < 0.5), e.g. a slow intro")
     ap.add_argument("--style", choices=["none", "dark-fantasy"], default="none",
                     help="dark-fantasy: gold grade, vignette, grain, embers, letterbox, fades "
                          "(Elden Ring / soulslike edit look)")
     ap.add_argument("--fade", type=float, default=None, help="fade in/out from black (s)")
     ap.add_argument("--crf", type=int, default=23, help="quality: lower = better + bigger file")
+    ap.add_argument("--dry-run", action="store_true", help="print the shot list and exit")
     ap.add_argument("--order", choices=["shuffle", "name"], default="shuffle")
     ap.add_argument("--seed", type=int, default=None)
     a = ap.parse_args()
@@ -218,9 +222,14 @@ def main():
         if s < a.cut_threshold or t < 0.15:
             continue
         count += 1
-        if count % a.cut_every == 0 and t - cuts[-1] >= a.min_shot and total - t >= max(0.3, a.min_shot):
+        ms = a.min_shot_quiet if (a.min_shot_quiet and s < 0.5) else a.min_shot
+        if count % a.cut_every == 0 and t - cuts[-1] >= ms and total - t >= max(0.3, a.min_shot):
             cuts.append(round(float(t), 3))
     cuts.append(total)
+    if a.dry_run:
+        for k in range(len(cuts) - 1):
+            print(f"shot {k + 1:3d}  {cuts[k]:6.2f}s  ({cuts[k + 1] - cuts[k]:.2f}s)  {files[k % len(files)].name}")
+        return
     nframes = int(total * a.fps)
     cut_frames = [round(c * a.fps) for c in cuts]
 
