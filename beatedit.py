@@ -75,21 +75,44 @@ def video_frames(path, w, h, fps, n, rng):
     p.wait()
 
 
+def trim_bars(img, thresh=12):
+    """Crop letterbox/pillarbox bars that are baked into an image (e.g. trailer stills)."""
+    g = img.max(axis=2)
+    rows = np.where(np.percentile(g, 98, axis=1) > thresh)[0]
+    cols = np.where(np.percentile(g, 98, axis=0) > thresh)[0]
+    if len(rows) < img.shape[0] * 0.3 or len(cols) < img.shape[1] * 0.3:
+        return img
+    return img[rows[0]:rows[-1] + 1, cols[0]:cols[-1] + 1]
+
+
 def image_frames(path, w, h, n, rng):
     """Ken-Burns: eased zoom + drift across a still image."""
     img = cv2.imread(str(path))
     if img is None:
         raise ValueError(f"cannot read {path}")
-    big = cover(img, int(w * 1.25), int(h * 1.25))
+    img = trim_bars(img)
+    ih, iw = img.shape[:2]
+    pan = iw / ih > 1.4 * w / h  # e.g. 16:9 art in a 9:16 frame: pan across it
+    if pan:
+        s = 1.25 * h / ih
+        big = cv2.resize(img, (round(iw * s), round(1.25 * h)), interpolation=cv2.INTER_AREA)
+    else:
+        big = cover(img, int(w * 1.25), int(h * 1.25))
     z0, z1 = (1.0, 1.15) if rng.random() < 0.5 else (1.15, 1.0)
+    if pan:
+        z0, z1 = 1.0 + (z0 - 1) * 0.4, 1.0 + (z1 - 1) * 0.4
     dx, dy = rng.uniform(-1, 1), rng.uniform(-1, 1)
     bh, bw = big.shape[:2]
     for i in range(n):
         t = i / max(1, n - 1)
         e = t * t * (3 - 2 * t)  # smoothstep easing
         z = z0 + (z1 - z0) * e
-        cw, ch = bw / (1.25 * z), bh / (1.25 * z)
-        cx = bw / 2 + dx * (bw - cw) / 2 * (e - 0.5)
+        cw, ch = w / z, h / z
+        if pan:
+            span = min((bw - cw) * 0.7, 0.012 * w * n)  # pan distance grows with shot length
+            cx = bw / 2 + (1 if dx > 0 else -1) * span * (e - 0.5)
+        else:
+            cx = bw / 2 + dx * (bw - cw) / 2 * (e - 0.5)
         cy = bh / 2 + dy * (bh - ch) / 2 * (e - 0.5)
         M = np.float32([[w / cw, 0, -(cx - cw / 2) * w / cw], [0, h / ch, -(cy - ch / 2) * h / ch]])
         yield cv2.warpAffine(big, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
@@ -200,6 +223,7 @@ def main():
                          "(Elden Ring / soulslike edit look)")
     ap.add_argument("--fade", type=float, default=None, help="fade in/out from black (s)")
     ap.add_argument("--crf", type=int, default=23, help="quality: lower = better + bigger file")
+    ap.add_argument("--captions", help="JSON file of timed quotes/titles (+ optional voice lines), see captions.py")
     ap.add_argument("--dry-run", action="store_true", help="print the shot list and exit")
     ap.add_argument("--order", choices=["shuffle", "name"], default="shuffle")
     ap.add_argument("--seed", type=int, default=None)
@@ -226,6 +250,18 @@ def main():
         if count % a.cut_every == 0 and t - cuts[-1] >= ms and total - t >= max(0.3, a.min_shot):
             cuts.append(round(float(t), 3))
     cuts.append(total)
+    caps = None
+    if a.captions:
+        from captions import Captions
+        caps = Captions(a.captions, w, h)
+        # "shot": [a, b] on a caption = one held shot for that line (cut at a and b, none between)
+        for c in caps.items:
+            if "shot" in c:
+                s0, s1 = c["shot"]
+                cuts = [x for x in cuts if not (s0 + 0.05 < x < s1 - 0.05)]
+                cuts += [x for x in (s0, s1) if 0.15 < x < total - 0.3]
+        cuts = sorted(set(round(x, 3) for x in cuts))
+        cuts = [x for i, x in enumerate(cuts) if i == 0 or x - cuts[i - 1] > 0.3]
     if a.dry_run:
         for k in range(len(cuts) - 1):
             print(f"shot {k + 1:3d}  {cuts[k]:6.2f}s  ({cuts[k + 1] - cuts[k]:.2f}s)  {files[k % len(files)].name}")
@@ -233,11 +269,13 @@ def main():
     nframes = int(total * a.fps)
     cut_frames = [round(c * a.fps) for c in cuts]
 
+    v_inputs, fc = caps.audio_args(1) if caps else ([], None)
+    amap = ["-filter_complex", fc, "-map", "0:v", "-map", "[aout]"] if fc else ["-map", "0:v", "-map", "1:a"]
     enc = subprocess.Popen([
         "ffmpeg", "-y", "-v", "error",
         "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", str(a.fps), "-i", "-",
-        "-ss", str(a.start), "-t", f"{total:.3f}", "-i", a.audio,
-        "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-preset", "medium", "-movflags", "+faststart", "-crf", str(a.crf),
+        "-ss", str(a.start), "-t", f"{total:.3f}", "-i", a.audio, *v_inputs,
+        *amap, "-c:v", "libx264", "-preset", "medium", "-movflags", "+faststart", "-crf", str(a.crf),
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-shortest", a.out],
         stdin=subprocess.PIPE)
 
@@ -276,6 +314,9 @@ def main():
                     zoom += e * 0.045  # hide edges
                 if a.glitch > 0 and s >= a.glitch_threshold and dt < 0.2:
                     gl = a.glitch * (0.6 + 0.4 * s) * (1 - dt / 0.2) * (fx_rng.random() < 0.85)
+            tt = fi / a.fps
+            if caps:  # title cards ride the shake/glitch
+                frame = caps.draw(frame.copy(), tt, "title", env)
             frame = glitch(transform(frame, zoom, dx, dy, rot), gl, fx_rng)
             if style:
                 frame = style(frame, fi / a.fps, env)
@@ -286,8 +327,9 @@ def main():
             if k > 0 and a.flash > 0:  # flash on cut
                 fl = a.flash * np.exp(-i / (0.06 * a.fps))
                 out = out + (255 - out) * fl
+            if caps:  # quotes stay steady and readable
+                out = caps.draw(np.clip(out, 0, 255).astype(np.uint8), tt, "quote").astype(np.float32)
             if a.fade > 0:
-                tt = fi / a.fps
                 out *= min(1.0, tt / a.fade, (total - tt) / a.fade)
             out = np.clip(out, 0, 255).astype(np.uint8)
             if style and style.bar:  # keep cinematic bars pure black through flashes

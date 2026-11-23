@@ -10,6 +10,8 @@
 - **Shake**: a jolt with a little rotation on every beat, harder on louder beats (`--shake`, try 0.5 to 1.5)
 - **Glitch** on strong beats: RGB split, torn horizontal slices, colour blocks and scanlines (`--glitch`, `--glitch-threshold`)
 - **Smart cutting**: cut only on beats above a set strength, with a minimum shot length, so quiet intros get longer shots and the drop cuts faster (`--cut-threshold`, `--min-shot`, `--min-shot-quiet`)
+- **Captions and voice lines** (`--captions file.json`): animated quotes with a chosen word (like *Tarnished*) in gold capitals and the speaker's name underneath, big title cards that shake and glitch with the beat, and optional voice clips mixed over the song, which drops in volume automatically while a voice plays. Add `"shot": [start, end]` to a caption to hold one image for the whole line. See `captions.py` for the format
+- **Vertical (9:16) from widescreen art**: wide images pan slowly across the frame, and black bars baked into trailer stills are cropped off
 - **`--dry-run`** prints the shot list (when each cut happens and which image it shows) without rendering
 - **`--style dark-fantasy`**: muted gold colour grade, vignette, film grain, floating embers that flare on the beat, cinematic black bars and fades. It's tuned for Elden Ring and soulslike edits
 
@@ -41,8 +43,12 @@ For a real edit, use your own gameplay recordings or screenshots, and a song you
 ## Elden Ring edit (official art + CC0 song)
 ```
 python getimages.py                       # downloads ~300 official Elden Ring pictures into images/ (not committed)
-examples/elden_ring/make_edit.sh          # renders renders/elden_ring_edit.mp4
+examples/elden_ring/make_edit.sh          # widescreen edit -> renders/elden_ring_edit.mp4
+examples/elden_ring/make_tarnished_edit.sh  # 9:16 "Tarnished" edit with 9 boss/NPC quotes
 ```
+The quotes are in `examples/elden_ring/tarnished_captions.json`, checked against the Fextralife and Fandom wikis. To add the real voice lines, put the clips in `examples/elden_ring/voices/` and add `"audio": "voices/margit.ogg"` (etc.) to each quote.
+
+Fonts: Cinzel and Cormorant Garamond (SIL Open Font License, in `fonts/`).
 
 ## Related projects
 - [scherroman/mugen](https://github.com/scherroman/mugen): rhythm-based music video generator (moviepy + librosa)
