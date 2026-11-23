@@ -34,7 +34,7 @@ trailer_stills/ER_Promo_Trailer_Battle_of_Aeonia08.jpg
 trailer_stills/ER_SOTE_Trailer_ss_41.jpg
 trailer_stills/ER_SOTE_Trailer_ss_30.jpg
 trailer_stills/ER_SOTE_Trailer_ss_06.jpg
-loading_screens/Blaidd_the_Half-Wolf_-_MENU_Load_00011_PS5.jpg
+trailer_stills/ER_SOTE_Trailer_ss_09.jpg
 trailer_stills/ER_SOTE_Trailer_ss_29.jpg
 trailer_stills/SotE_Story_Trailer_00-00-56.jpg
 trailer_stills/ER_SOTE_Trailer_ss_42.jpg
@@ -47,5 +47,5 @@ python3 beatedit.py "music/Black Knight.mp3" "$SEQ" -o "${1:-renders/elden_ring_
   --start 51 --duration 63.5 --size 1920x1080 --fps 30 --style dark-fantasy \
   --cut-threshold 0.25 --min-shot 1.25 --min-shot-quiet 2.5 \
   --shake 0.9 --glitch 0.8 --glitch-threshold 0.85 --punch 0.05 --flash 0.18 --xfade 0.08 \
-  --crf 22 --seed 7
+  --crf 27 --seed 7
 rm -rf "$SEQ"

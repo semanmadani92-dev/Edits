@@ -290,6 +290,9 @@ def main():
                 tt = fi / a.fps
                 out *= min(1.0, tt / a.fade, (total - tt) / a.fade)
             out = np.clip(out, 0, 255).astype(np.uint8)
+            if style and style.bar:  # keep cinematic bars pure black through flashes
+                out[:style.bar] = 0
+                out[-style.bar:] = 0
             enc.stdin.write(out.tobytes())
             prev_tail = out
     enc.stdin.close()
