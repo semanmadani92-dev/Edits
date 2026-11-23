@@ -7,6 +7,10 @@
 - **Smooth motion**: photos slowly zoom and drift (Ken Burns style), and video clips start from a random point
 - **Beat punch**: a quick zoom-in on every beat, stronger on louder beats (`--punch`)
 - **Flash and crossfade** on each cut (`--flash`, `--xfade`)
+- **Shake**: a jolt with a little rotation on every beat, harder on louder beats (`--shake`, try 0.5 to 1.5)
+- **Glitch** on strong beats: RGB split, torn horizontal slices, colour blocks and scanlines (`--glitch`, `--glitch-threshold`)
+- **Smart cutting**: cut only on beats above a set strength, with a minimum shot length, so quiet intros get longer shots and the drop cuts faster (`--cut-threshold`, `--min-shot`)
+- **`--style dark-fantasy`**: muted gold colour grade, vignette, film grain, floating embers that flare on the beat, cinematic black bars and fades. It's tuned for Elden Ring and soulslike edits
 
 ## Setup
 ```
@@ -21,6 +25,17 @@ python beatedit.py song.mp3 my_media/ --cut-every 2 --size 1920x1080    # slower
 python beatedit.py song.mp3 my_media/ --order name --punch 0.1 --flash 0
 ```
 Run `python beatedit.py -h` to see all options.
+
+## Elden Ring / soulslike-style edit
+```
+examples/dark_fantasy/make_edit.sh                          # demo: original song + generated art
+examples/dark_fantasy/make_edit.sh song.mp3 my_clips/       # your own song + gameplay clips
+```
+- `make_song.py` creates **"Ashen Crown"**, an original 90 BPM dark choir, taiko and brass track. It's generated entirely in code, so it's free to use.
+- `make_art.py` creates 12 original placeholder scenes: castles, a knight, a dragon, ruins and moons.
+- The finished demo is in `renders/elden_style_edit.mp4`.
+
+For a real edit, use your own gameplay recordings or screenshots, and a song you have the rights to use.
 
 ## Related projects
 - [scherroman/mugen](https://github.com/scherroman/mugen): rhythm-based music video generator (moviepy + librosa)

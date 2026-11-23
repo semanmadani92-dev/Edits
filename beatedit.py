@@ -95,13 +95,81 @@ def image_frames(path, w, h, n, rng):
 
 
 # ---------------------------------------------------------------- effects
-def punch(frame, amount):
-    """Zoom in by (1+amount) around the centre."""
-    if amount < 1e-3:
+def transform(frame, zoom=0.0, dx=0.0, dy=0.0, rot=0.0):
+    """Zoom (punch) + translate/rotate (shake) in one warp."""
+    if abs(zoom) < 1e-3 and abs(dx) < 0.3 and abs(dy) < 0.3 and abs(rot) < 0.01:
         return frame
     h, w = frame.shape[:2]
-    M = cv2.getRotationMatrix2D((w / 2, h / 2), 0, 1 + amount)
+    M = cv2.getRotationMatrix2D((w / 2, h / 2), rot, 1 + zoom)
+    M[0, 2] += dx
+    M[1, 2] += dy
     return cv2.warpAffine(frame, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+
+
+def glitch(frame, amt, rng):
+    """RGB split + displaced horizontal slices + scanlines. amt in 0..1."""
+    if amt < 0.03:
+        return frame
+    h, w = frame.shape[:2]
+    out = frame.copy()
+    s = max(1, int(amt * 0.035 * w))
+    out[:, :, 2] = np.roll(frame[:, :, 2], s, axis=1)    # red right
+    out[:, :, 0] = np.roll(frame[:, :, 0], -s, axis=1)   # blue left
+    for _ in range(int(3 + amt * 10)):                    # torn slices
+        y0 = rng.randrange(0, h)
+        sh = rng.randrange(2, max(3, int(h * 0.05 * amt) + 3))
+        off = int(rng.uniform(-1, 1) * amt * 0.12 * w)
+        out[y0:y0 + sh] = np.roll(out[y0:y0 + sh], off, axis=1)
+    if rng.random() < amt:                                # one block of colour noise
+        bh, bw = int(h * 0.04), int(w * rng.uniform(0.2, 0.6))
+        y0, x0 = rng.randrange(0, h - bh), rng.randrange(0, w - bw)
+        out[y0:y0 + bh, x0:x0 + bw] = out[y0:y0 + bh, x0:x0 + bw][:, :, ::-1]
+    out[::3] = (out[::3] * (1 - 0.35 * amt)).astype(np.uint8)  # scanlines
+    return out
+
+
+class DarkFantasy:
+    """Desaturated gold grade, vignette, film grain, rising embers, letterbox."""
+
+    def __init__(self, w, h, fps, seed, letterbox):
+        self.w, self.h, self.fps = w, h, fps
+        r = np.random.default_rng(seed)
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        d = np.sqrt(((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2)
+        self.vig = np.clip(1.15 - 0.55 * d ** 2, 0.25, 1)[..., None].astype(np.float32)
+        self.grain = [r.normal(0, 9, (h, w, 1)).astype(np.float32) for _ in range(6)]
+        n = 70
+        self.p = dict(x=r.uniform(0, w, n), y=r.uniform(0, h, n), vy=r.uniform(15, 60, n) * h / 1080,
+                      sway=r.uniform(5, 25, n), ph=r.uniform(0, 6.3, n), sz=r.uniform(1, 3.5, n) * w / 1080,
+                      fl=r.uniform(1, 4, n))
+        self.bar = int(max(0, (h - w / letterbox) / 2)) if letterbox and w > h else (
+            int(h * 0.06) if letterbox else 0)
+
+    def __call__(self, frame, t, beat_env):
+        f = frame.astype(np.float32) / 255
+        L = (0.114 * f[..., :1] + 0.587 * f[..., 1:2] + 0.299 * f[..., 2:])
+        f = L + (f - L) * 0.5                                   # desaturate
+        f = f * f * (3 - 2 * f) * 0.6 + f * 0.4                  # contrast S-curve
+        gold = np.array([0.62, 0.92, 1.12], np.float32)          # BGR warm highlights
+        cool = np.array([1.06, 0.95, 0.88], np.float32)          # cool shadows
+        f = f * (cool + (gold - cool) * np.clip(L * 1.4, 0, 1))
+        f = f * 255 * self.vig + self.grain[int(t * self.fps) % 6]
+        # embers (drawn small, blurred, added) — brighten on the beat
+        sc = 4
+        layer = np.zeros((self.h // sc, self.w // sc), np.float32)
+        p = self.p
+        ys = (p["y"] - p["vy"] * t) % self.h
+        xs = (p["x"] + p["sway"] * np.sin(t * 0.8 + p["ph"])) % self.w
+        br = 0.5 + 0.5 * np.sin(t * p["fl"] + p["ph"])
+        for x, y, s, b in zip(xs, ys, p["sz"], br):
+            cv2.circle(layer, (int(x / sc), int(y / sc)), max(1, int(s / sc + 0.5)), float(b), -1)
+        layer = cv2.GaussianBlur(layer, (0, 0), 1.5)
+        layer = cv2.resize(layer, (self.w, self.h), interpolation=cv2.INTER_LINEAR)[..., None]
+        f += layer * (170 + 120 * beat_env) * np.array([0.35, 0.75, 1.0], np.float32)
+        if self.bar:
+            f[:self.bar] = 0
+            f[-self.bar:] = 0
+        return np.clip(f, 0, 255).astype(np.uint8)
 
 
 def main():
@@ -117,9 +185,23 @@ def main():
     ap.add_argument("--punch", type=float, default=0.06, help="beat zoom amount (0 = off)")
     ap.add_argument("--flash", type=float, default=0.35, help="white flash strength on cuts (0 = off)")
     ap.add_argument("--xfade", type=float, default=0.08, help="crossfade length (s)")
+    ap.add_argument("--shake", type=float, default=0.0, help="camera shake on beats (try 0.5-1.5)")
+    ap.add_argument("--glitch", type=float, default=0.0, help="glitch on strong beats (try 0.5-1)")
+    ap.add_argument("--glitch-threshold", type=float, default=0.6,
+                    help="only beats with strength >= this (0-1) glitch")
+    ap.add_argument("--cut-threshold", type=float, default=0.0,
+                    help="only cut on beats with strength >= this (0-1): quiet parts get longer shots")
+    ap.add_argument("--min-shot", type=float, default=0.0, help="minimum shot length (s)")
+    ap.add_argument("--style", choices=["none", "dark-fantasy"], default="none",
+                    help="dark-fantasy: gold grade, vignette, grain, embers, letterbox, fades "
+                         "(Elden Ring / soulslike edit look)")
+    ap.add_argument("--fade", type=float, default=None, help="fade in/out from black (s)")
+    ap.add_argument("--crf", type=int, default=23, help="quality: lower = better + bigger file")
     ap.add_argument("--order", choices=["shuffle", "name"], default="shuffle")
     ap.add_argument("--seed", type=int, default=None)
     a = ap.parse_args()
+    if a.fade is None:
+        a.fade = 1.2 if a.style == "dark-fantasy" else 0.0
 
     w, h = map(int, a.size.lower().split("x"))
     rng = random.Random(a.seed)
@@ -131,8 +213,14 @@ def main():
 
     tempo, beats, strength, total = detect_beats(a.audio, a.start, a.duration)
     print(f"tempo ≈ {tempo:.1f} BPM, {len(beats)} beats over {total:.1f}s, {len(files)} media files")
-    cuts = [0.0] + [t for t in beats[::a.cut_every] if t > 0.15] + [total]
-    cuts = sorted(set(round(c, 3) for c in cuts))
+    cuts, count = [0.0], 0
+    for t, s in zip(beats, strength):
+        if s < a.cut_threshold or t < 0.15:
+            continue
+        count += 1
+        if count % a.cut_every == 0 and t - cuts[-1] >= a.min_shot and total - t >= max(0.3, a.min_shot):
+            cuts.append(round(float(t), 3))
+    cuts.append(total)
     nframes = int(total * a.fps)
     cut_frames = [round(c * a.fps) for c in cuts]
 
@@ -140,13 +228,16 @@ def main():
         "ffmpeg", "-y", "-v", "error",
         "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", str(a.fps), "-i", "-",
         "-ss", str(a.start), "-t", f"{total:.3f}", "-i", a.audio,
-        "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+        "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-preset", "medium", "-movflags", "+faststart", "-crf", str(a.crf),
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-shortest", a.out],
         stdin=subprocess.PIPE)
 
     beat_f = np.array(beats) * a.fps
     xf = max(0, int(a.xfade * a.fps))
     prev_tail = None
+    style = DarkFantasy(w, h, a.fps, a.seed or 0, 2.39) if a.style == "dark-fantasy" else None
+    beat_dirs = [(rng.uniform(0, 6.3), rng.uniform(0, 6.3), rng.uniform(0, 6.3)) for _ in beats]
+    fx_rng = random.Random(a.seed)
     for k in range(len(cut_frames) - 1):
         f0, f1 = cut_frames[k], min(cut_frames[k + 1], nframes)
         n = f1 - f0
@@ -158,20 +249,37 @@ def main():
         print(f"  [{k + 1}/{len(cut_frames) - 1}] {cuts[k]:6.2f}s  {src.name}")
         for i, frame in enumerate(gen):
             fi = f0 + i
-            # zoom punch: decays after the most recent beat
+            # beat-driven effects: all decay after the most recent beat
             past = beat_f[beat_f <= fi]
-            amt = 0.0
+            zoom = dx = dy = rot = env = gl = 0.0
             if len(past):
                 bi = len(past) - 1
                 dt = (fi - past[-1]) / a.fps
-                amt = a.punch * (0.5 + 0.5 * strength[bi]) * np.exp(-dt / 0.12)
-            out = punch(frame, amt).astype(np.float32)
+                s = strength[bi]
+                env = s * np.exp(-dt / 0.15)
+                zoom = a.punch * (0.5 + 0.5 * s) * np.exp(-dt / 0.12)
+                if a.shake > 0:  # damped oscillation in a random direction per beat
+                    p1, p2, p3 = beat_dirs[bi]
+                    e = a.shake * (0.3 + 0.7 * s) * np.exp(-dt / 0.14)
+                    dx = e * 0.02 * w * np.sin(2 * np.pi * 9 * dt + p1)
+                    dy = e * 0.02 * w * np.sin(2 * np.pi * 11 * dt + p2)
+                    rot = e * 1.2 * np.sin(2 * np.pi * 7 * dt + p3)
+                    zoom += e * 0.045  # hide edges
+                if a.glitch > 0 and s >= a.glitch_threshold and dt < 0.2:
+                    gl = a.glitch * (0.6 + 0.4 * s) * (1 - dt / 0.2) * (fx_rng.random() < 0.85)
+            frame = glitch(transform(frame, zoom, dx, dy, rot), gl, fx_rng)
+            if style:
+                frame = style(frame, fi / a.fps, env)
+            out = frame.astype(np.float32)
             if k > 0 and prev_tail is not None and i < xf:  # crossfade from previous segment
                 al = (i + 1) / (xf + 1)
                 out = out * al + prev_tail.astype(np.float32) * (1 - al)
             if k > 0 and a.flash > 0:  # flash on cut
                 fl = a.flash * np.exp(-i / (0.06 * a.fps))
                 out = out + (255 - out) * fl
+            if a.fade > 0:
+                tt = fi / a.fps
+                out *= min(1.0, tt / a.fade, (total - tt) / a.fade)
             out = np.clip(out, 0, 255).astype(np.uint8)
             enc.stdin.write(out.tobytes())
             prev_tail = out
