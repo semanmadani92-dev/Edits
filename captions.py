@@ -25,7 +25,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 FONTS = Path(__file__).parent / "fonts"
 GOLD = (236, 196, 120)
 INK = (238, 232, 220)
-DIM = (200, 186, 152)
+DIM = (232, 218, 182)
 
 
 def _font(name, size, variation):
@@ -64,7 +64,7 @@ def _sprite(draw_fn, size, glow_color=None, glow=0, shadow=10):
 def _quote_sprite(text, speaker, w, highlight):
     q = _font("CormorantGaramond-Italic.ttf", int(w * 0.066), "Medium Italic")
     hi = _font("Cinzel.ttf", int(w * 0.062), "Bold")
-    sp = _font("Cinzel.ttf", int(w * 0.036), "Regular")
+    sp = _font("Cinzel.ttf", int(w * 0.041), "Bold")
     hl = re.compile("|".join(re.escape(x) for x in highlight), re.I) if highlight else None
     words = f"“{text}”".split()
     styled = [(wd, hi if hl and hl.search(wd) else q) for wd in words]
@@ -108,7 +108,7 @@ def _quote_sprite(text, speaker, w, highlight):
 def _title_sprite(text, w):
     size = int(w * 0.16)
     f = _font("Cinzel.ttf", size, "Black")
-    while f.getlength(text) > w * 0.9 and size > 20:
+    while f.getlength(text) > w * 0.78 and size > 20:
         size = int(size * 0.92)
         f = _font("Cinzel.ttf", size, "Black")
     tw = f.getlength(text)
