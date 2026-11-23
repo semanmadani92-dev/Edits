@@ -1,30 +1,155 @@
 {
-  "_about": "Quotes verified against the Elden Ring wikis (Fextralife + Fandom). Times are seconds into the edit (song from 0:34.06). 'shot' holds one image for the whole line. To add real voice lines, put clips in examples/elden_ring/voices/ and add \"audio\": \"voices/<file>\" to an entry (optional \"gain\", \"audio_at\").",
-  "highlight": ["Tarnished"],
-  "duck": 0.35,
-  "captions": [
-    {"shot": [0.0, 5.57], "start": 0.9, "end": 5.2,
-     "speaker": "Opening narration", "text": "Arise now, ye Tarnished."},
-    {"shot": [5.57, 10.91], "start": 5.9, "end": 10.6,
-     "speaker": "White Mask Varré", "text": "Tarnished, are we? Unfortunately for you, however, you are maidenless."},
-    {"shot": [10.91, 16.23], "start": 11.2, "end": 15.9,
-     "speaker": "Margit, the Fell Omen", "text": "Foul Tarnished, in search of the Elden Ring."},
-    {"shot": [16.23, 21.57], "start": 16.5, "end": 21.2,
-     "speaker": "Godrick the Grafted", "text": "Lowly Tarnished… thou'rt unfit even to graft."},
-    {"shot": [21.57, 26.91], "start": 21.9, "end": 26.6,
-     "speaker": "Ranni the Witch", "text": "A pleasure to meet thee, Tarnished. I am the witch Renna."},
-    {"shot": [26.91, 32.21], "start": 27.2, "end": 31.4,
-     "speaker": "Morgott, the Omen King", "text": "Tarnished, thou'rt but a fool."},
-
-    {"start": 32.21, "end": 33.5, "title": "TARNISHED"},
-
-    {"shot": [48.20, 51.55], "start": 48.3, "end": 51.4,
-     "speaker": "Maliketh, the Black Blade", "text": "Witless Tarnished… Why covet Destined Death?"},
-    {"shot": [57.54, 61.56], "start": 57.7, "end": 61.4,
-     "speaker": "Miquella", "text": "Tarnished one. Aspiring Lord of the old order."},
-    {"shot": [65.55, 69.54], "start": 65.7, "end": 69.4,
-     "speaker": "Hoarah Loux", "text": "Brave Tarnished. Thy strength befits a crown."},
-
-    {"start": 69.8, "end": 72.6, "title": "RISE, TARNISHED", "y": 0.5}
-  ]
+ "_about": "Quotes verified against the Elden Ring wikis (Fextralife + Fandom). Times are seconds into the edit (song from 0:34.06). 'shot' holds one image for the whole line. To add real voice lines, put clips in examples/elden_ring/voices/ and add \"audio\": \"voices/<file>\" to an entry (optional \"gain\", \"audio_at\").",
+ "highlight": [
+  "Tarnished"
+ ],
+ "duck": 0.35,
+ "captions": [
+  {
+   "shot": [
+    0.0,
+    5.57
+   ],
+   "start": 0.9,
+   "end": 5.2,
+   "speaker": "Opening narration",
+   "text": "Arise now, ye Tarnished.",
+   "audio": "voices/narrator.wav",
+   "search": [
+    "arise now ye tarnished",
+    "rise tarnished"
+   ]
+  },
+  {
+   "shot": [
+    5.57,
+    10.91
+   ],
+   "start": 5.9,
+   "end": 10.6,
+   "speaker": "White Mask Varré",
+   "text": "Tarnished, are we? Unfortunately for you, however, you are maidenless.",
+   "audio": "voices/varre.wav",
+   "search": [
+    "maidenless",
+    "varre"
+   ]
+  },
+  {
+   "shot": [
+    10.91,
+    16.23
+   ],
+   "start": 11.2,
+   "end": 15.9,
+   "speaker": "Margit, the Fell Omen",
+   "text": "Foul Tarnished, in search of the Elden Ring.",
+   "audio": "voices/margit.wav",
+   "search": [
+    "foul tarnished",
+    "margit"
+   ]
+  },
+  {
+   "shot": [
+    16.23,
+    21.57
+   ],
+   "start": 16.5,
+   "end": 21.2,
+   "speaker": "Godrick the Grafted",
+   "text": "Lowly Tarnished… thou'rt unfit even to graft.",
+   "audio": "voices/godrick.wav",
+   "search": [
+    "godrick",
+    "lowly tarnished"
+   ]
+  },
+  {
+   "shot": [
+    21.57,
+    26.91
+   ],
+   "start": 21.9,
+   "end": 26.6,
+   "speaker": "Ranni the Witch",
+   "text": "A pleasure to meet thee, Tarnished. I am the witch Renna.",
+   "audio": "voices/ranni.wav",
+   "search": [
+    "ranni",
+    "renna"
+   ]
+  },
+  {
+   "shot": [
+    26.91,
+    32.21
+   ],
+   "start": 27.2,
+   "end": 31.4,
+   "speaker": "Morgott, the Omen King",
+   "text": "Tarnished, thou'rt but a fool.",
+   "audio": "voices/morgott.wav",
+   "search": [
+    "morgott",
+    "thou'rt but a fool"
+   ]
+  },
+  {
+   "start": 32.21,
+   "end": 33.5,
+   "title": "TARNISHED"
+  },
+  {
+   "shot": [
+    48.2,
+    51.55
+   ],
+   "start": 48.3,
+   "end": 51.4,
+   "speaker": "Maliketh, the Black Blade",
+   "text": "Witless Tarnished… Why covet Destined Death?",
+   "audio": "voices/maliketh.wav",
+   "search": [
+    "maliketh",
+    "destined death"
+   ]
+  },
+  {
+   "shot": [
+    57.54,
+    61.56
+   ],
+   "start": 57.7,
+   "end": 61.4,
+   "speaker": "Miquella",
+   "text": "Tarnished one. Aspiring Lord of the old order.",
+   "audio": "voices/miquella.wav",
+   "search": [
+    "miquella",
+    "tarnished one"
+   ]
+  },
+  {
+   "shot": [
+    65.55,
+    69.54
+   ],
+   "start": 65.7,
+   "end": 69.4,
+   "speaker": "Hoarah Loux",
+   "text": "Brave Tarnished. Thy strength befits a crown.",
+   "audio": "voices/hoarah_loux.wav",
+   "search": [
+    "hoarah loux",
+    "godfrey"
+   ]
+  },
+  {
+   "start": 69.8,
+   "end": 72.6,
+   "title": "RISE, TARNISHED",
+   "y": 0.5
+  }
+ ]
 }
