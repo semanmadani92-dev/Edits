@@ -223,6 +223,13 @@ def main():
                          "(Elden Ring / soulslike edit look)")
     ap.add_argument("--fade", type=float, default=None, help="fade in/out from black (s)")
     ap.add_argument("--crf", type=int, default=23, help="quality: lower = better + bigger file")
+    ap.add_argument("--lyrics", help=".lrc time-synced lyrics (e.g. from lrclib.net) for lyric-matched shots")
+    ap.add_argument("--lyrics-offset", type=float, default=None,
+                    help="song time (s) where this edit's audio starts, for the lyrics (default: --start)")
+    ap.add_argument("--tags", help='JSON {"image.jpg": ["wind","trees",...]} used to match images to lyrics')
+    ap.add_argument("--lyric-captions", action="store_true", help="show the lyric lines on screen")
+    ap.add_argument("--plan-out", help="write the shot plan (time, image, lyric, why) to JSON and stop")
+    ap.add_argument("--plan-in", help="render this (possibly hand-edited) shot plan JSON")
     ap.add_argument("--captions", help="JSON file of timed quotes/titles (+ optional voice lines), see captions.py")
     ap.add_argument("--dry-run", action="store_true", help="print the shot list and exit")
     ap.add_argument("--order", choices=["shuffle", "name"], default="shuffle")
@@ -250,10 +257,14 @@ def main():
         if count % a.cut_every == 0 and t - cuts[-1] >= ms and total - t >= max(0.3, a.min_shot):
             cuts.append(round(float(t), 3))
     cuts.append(total)
+    import lyrics as lyr
+    lines = lyr.parse_lrc(a.lyrics) if a.lyrics else None
+    loff = a.start if a.lyrics_offset is None else a.lyrics_offset
+    extra = lyr.lyric_captions(lines, loff, total) if (lines and a.lyric_captions) else []
     caps = None
-    if a.captions:
+    if a.captions or extra:
         from captions import Captions
-        caps = Captions(a.captions, w, h)
+        caps = Captions(a.captions, w, h, extra)
         # "shot": [a, b] on a caption = one held shot for that line (cut at a and b, none between)
         for c in caps.items:
             if "shot" in c:
@@ -262,9 +273,23 @@ def main():
                 cuts += [x for x in (s0, s1) if 0.15 < x < total - 0.3]
         cuts = sorted(set(round(x, 3) for x in cuts))
         cuts = [x for i, x in enumerate(cuts) if i == 0 or x - cuts[i - 1] > 0.3]
-    if a.dry_run:
-        for k in range(len(cuts) - 1):
-            print(f"shot {k + 1:3d}  {cuts[k]:6.2f}s  ({cuts[k + 1] - cuts[k]:.2f}s)  {files[k % len(files)].name}")
+    if a.plan_in:  # a reviewed/hand-edited plan decides cuts and images
+        import json as _json
+        plan = _json.loads(Path(a.plan_in).read_text())["shots"]
+        cuts = [p["start"] for p in plan] + [plan[-1]["end"]]
+    else:
+        plan = lyr.plan_shots(cuts, files, lines, loff, lyr.load_tags(a.tags, files) if (lines or a.tags) else None)
+    for wmsg in lyr.validate(plan):
+        print("  warning:", wmsg)
+    if a.plan_out:
+        import json as _json
+        Path(a.plan_out).write_text(_json.dumps({"song": a.audio, "start": a.start, "duration": total,
+                                                 "shots": plan}, indent=1, ensure_ascii=False))
+        print(f"wrote plan with {len(plan)} shots -> {a.plan_out} (edit it, then render with --plan-in)")
+    if a.dry_run or a.plan_out:
+        for p in plan:
+            why = f"  <- lyric match {p['matched']}" if p["reason"] == "lyric match" else ""
+            print(f"shot {p['shot']:3d}  {p['start']:6.2f}s  ({p['end'] - p['start']:.2f}s)  {Path(p['file']).name}{why}")
         return
     nframes = int(total * a.fps)
     cut_frames = [round(c * a.fps) for c in cuts]
@@ -290,7 +315,7 @@ def main():
         n = f1 - f0
         if n <= 0:
             continue
-        src = files[k % len(files)]
+        src = Path(plan[k]["file"])
         gen = (image_frames(src, w, h, n, rng) if src.suffix.lower() in IMG_EXT
                else video_frames(src, w, h, a.fps, n, rng))
         print(f"  [{k + 1}/{len(cut_frames) - 1}] {cuts[k]:6.2f}s  {src.name}")

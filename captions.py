@@ -61,7 +61,7 @@ def _sprite(draw_fn, size, glow_color=None, glow=0, shadow=10):
     return out
 
 
-def _quote_sprite(text, speaker, w, highlight):
+def _quote_sprite(text, speaker, w, highlight, plain=False):
     q = _font("CormorantGaramond-Italic.ttf", int(w * 0.066), "Medium Italic")
     hi = _font("Cinzel.ttf", int(w * 0.062), "Bold")
     sp = _font("Cinzel.ttf", int(w * 0.041), "Bold")
@@ -135,9 +135,10 @@ def _blend(frame, spr, y, alpha):
 
 
 class Captions:
-    def __init__(self, path, w, h):
-        spec = json.loads(Path(path).read_text())
-        self.base = Path(path).parent
+    def __init__(self, path, w, h, extra=None):
+        spec = json.loads(Path(path).read_text()) if path else {"captions": [], "highlight": []}
+        spec["captions"] = spec["captions"] + (extra or [])
+        self.base = Path(path).parent if path else Path(".")
         self.w, self.h = w, h
         self.duck = spec.get("duck", 0.35)
         hl = spec.get("highlight", ["Tarnished"])
@@ -146,7 +147,7 @@ class Captions:
             if "title" in c:
                 spr, kind = _title_sprite(c["title"], w), "title"
             else:
-                spr, kind = _quote_sprite(c["text"], c.get("speaker", ""), w, hl), "quote"
+                spr, kind = _quote_sprite(c["text"], c.get("speaker", ""), w, hl, c.get("plain", False)), "quote"
             self.items.append(dict(c, sprite=spr, kind=kind))
 
     def draw(self, frame, t, kind, beat_env=0.0):

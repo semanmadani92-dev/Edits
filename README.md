@@ -50,8 +50,25 @@ The quotes are in `examples/elden_ring/tarnished_captions.json`, checked against
 
 Fonts: Cinzel and Cormorant Garamond (SIL Open Font License, in `fonts/`).
 
+## Free music for edits
+```
+python getmusic.py ncs search phonk          # NoCopyrightSounds: free full songs for creators (credit required)
+python getmusic.py ncs get "Mortals Funk"    # saves the mp3 + a .credit.txt to paste in your post
+python getmusic.py search epic               # ~8,800 public-domain tracks, no credit needed
+```
+**Charting/copyrighted songs, free:** use Apple's free 30-second preview to time the edit, and LRCLIB for synced lyrics. Then add the song from TikTok's or Instagram's free in-app music library when you post, because those are licensed for the platform. See `examples/arcane/`.
+
+## Lyric-matched shots and plan review
+```
+python beatedit.py song.wav images/ --lyrics song.lrc --tags tags.json --plan-out plan.json   # review the plan
+python beatedit.py song.wav images/ --plan-in plan.json -o edit.mp4                           # render it as planned
+```
+When a lyric line plays, beatedit picks an image whose tags match its words (`lyrics.py` also maps related words, so "breeze" matches wind and sky). It doesn't reuse images while unused ones remain, and it warns about repeats. Add `--lyric-captions` to show the lyrics on screen.
+
 ## Related projects
 - [scherroman/mugen](https://github.com/scherroman/mugen): rhythm-based music video generator (moviepy + librosa)
 - [leocodeio/synctest](https://awesome.ecosyste.ms/projects/github.com%2Fleocodeio%2Fsynctest): beat sync combined with scene and motion detection
 - [Cyberes gist](https://gist.github.com/Cyberes/8554e1e2b4bd85ba030c1e818deadf19): beat-synced slideshow script
+- [kajisho5/ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill): installed in `.claude/skills/` (MIT, audited): local FFmpeg editing tools for clips
+- [guigulaoshi/music-video-director-skill](https://github.com/guigulaoshi/music-video-director-skill): source of the lyric-matching and plan-review ideas
 - [emjjkk/beat-detection](https://github.com/emjjkk/beat-detection): exports beat markers for Premiere, Resolve and Final Cut
