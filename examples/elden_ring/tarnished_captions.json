@@ -1,5 +1,5 @@
 {
- "_about": "Quotes verified against the Elden Ring wikis (Fextralife + Fandom). Times are seconds into the edit (song from 0:34.06). 'shot' holds one image for the whole line. To add real voice lines, put clips in examples/elden_ring/voices/ and add \"audio\": \"voices/<file>\" to an entry (optional \"gain\", \"audio_at\").",
+ "_about": "Quotes verified against the Elden Ring wikis (Fextralife + Fandom). Times are seconds into the edit (song from 0:34.06). 'shot' holds one image for the whole line. To add real voice lines, put clips in examples/elden_ring/voices/ and add \"audio\": \"voices/<file>\" to an entry (optional \"gain\", \"audio_at\"). Voice clips: 'source' + 'clip' [start,end] are hand-checked myinstants.com clips; run `python getvoices.py <this file>` to fetch them into voices/ (gitignored). Lines without a clip stay text-only.",
  "highlight": [
   "Tarnished"
  ],
@@ -33,6 +33,11 @@
    "search": [
     "maidenless",
     "varre"
+   ],
+   "source": "https://www.myinstants.com/media/sounds/you-are-maidenless.mp3",
+   "clip": [
+    0.0,
+    5.2
    ]
   },
   {
@@ -48,6 +53,11 @@
    "search": [
     "foul tarnished",
     "margit"
+   ],
+   "source": "https://www.myinstants.com/media/sounds/elden-ring-margit-the-fell-omen-voiceline.mp3",
+   "clip": [
+    0.0,
+    2.5
    ]
   },
   {
@@ -58,11 +68,16 @@
    "start": 16.5,
    "end": 21.2,
    "speaker": "Godrick the Grafted",
-   "text": "Lowly Tarnished… thou'rt unfit even to graft.",
+   "text": "…Well. A lowly Tarnished, playing as a lord.",
    "audio": "voices/godrick.wav",
    "search": [
     "godrick",
     "lowly tarnished"
+   ],
+   "source": "https://www.myinstants.com/media/sounds/elden-ring-kneel.mp3",
+   "clip": [
+    5.3,
+    10.3
    ]
   },
   {
@@ -88,11 +103,16 @@
    "start": 27.2,
    "end": 31.4,
    "speaker": "Morgott, the Omen King",
-   "text": "Tarnished, thou'rt but a fool.",
+   "text": "Graceless Tarnished. What is thy business with these thrones?",
    "audio": "voices/morgott.wav",
    "search": [
     "morgott",
     "thou'rt but a fool"
+   ],
+   "source": "https://www.myinstants.com/media/sounds/king-morgott.mp3",
+   "clip": [
+    0.2,
+    3.6
    ]
   },
   {

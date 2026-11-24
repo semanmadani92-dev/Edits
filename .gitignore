@@ -3,3 +3,4 @@ build/
 !renders/*.mp4
 __pycache__/
 images/
+examples/elden_ring/voices/

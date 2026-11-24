@@ -51,12 +51,17 @@ def score(title, cap):
     return len(t & q) * 2 + len(t & sp) * 3
 
 
-def prepare(src, dest):
-    """Trim silence at both ends + loudness-normalise to a wav."""
+def prepare(src, dest, clip=None):
+    """Cut [start, end] (or trim silence at both ends), short fades, loudness-normalise to a wav."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    af = ("silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,"
-          "areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.15,areverse,"
-          "loudnorm=I=-16:TP=-1.5")
+    if clip:
+        a, b = clip
+        af = (f"atrim={a}:{b},asetpts=PTS-STARTPTS,afade=t=in:d=0.04,"
+              f"afade=t=out:st={max(0, b - a - 0.25):.2f}:d=0.25,loudnorm=I=-16:TP=-1.5")
+    else:
+        af = ("silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05,"
+              "areverse,silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.15,areverse,"
+              "loudnorm=I=-16:TP=-1.5")
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-af", af, "-ar", "44100", "-ac", "2",
                     str(dest)], check=True)
 
@@ -75,6 +80,13 @@ def main():
         if dest.exists() and not a.list:
             print(f"have   {dest.name}")
             continue
+        if c.get("source") and not a.list:  # an exact, hand-checked clip
+            with tempfile.NamedTemporaryFile(suffix=".mp3") as tmp:
+                tmp.write(get(c["source"]))
+                tmp.flush()
+                prepare(Path(tmp.name), dest, c.get("clip"))
+            print(f"got    {dest.name}  <- {c['source'].rsplit('/', 1)[-1]} {c.get('clip', '')}")
+            continue
         queries = c.get("search") or [c["text"][:40], c.get("speaker", "").split(",")[0] + " elden ring"]
         cands = []
         for q in queries:
@@ -88,7 +100,7 @@ def main():
             for t, u in cands[:6]:
                 print(f"   [{score(t, c)}] {t}  {u}")
             continue
-        if not cands or score(cands[0][0], c) < 3:
+        if not cands or score(cands[0][0], c) < 6 or c.get("search_only_if_listed"):
             print(f"MISSING {dest.name}  (no good match for {c.get('speaker')}; add your own clip there)")
             continue
         title, url = cands[0]
@@ -96,7 +108,7 @@ def main():
             tmp.write(get(url))
             tmp.flush()
             prepare(Path(tmp.name), dest)
-        print(f"got    {dest.name}  <- \"{title}\"")
+        print(f"got    {dest.name}  <- \"{title}\"  (auto-matched: check it!)")
 
 
 if __name__ == "__main__":
