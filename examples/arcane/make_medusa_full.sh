@@ -101,7 +101,7 @@ stills/MME12.jpg
 stills/2817.jpg
 stills/Arcane_Season_1_4.jpg
 EOF
-python3 beatedit.py none "$SEQ" -o "${1:-renders/arcane_medusa_full_9x16.mp4}" --order name \
+python3 beatedit.py "${SONG:-none}" "$SEQ" -o "${1:-renders/arcane_medusa_full_9x16.mp4}" --order name \
   --grid 115.903,-0.0072 --accent 2,1 --start 0 --duration 59.53 \
   --intensity "0:0.15,7.757:0.9,23.288:1,38.818:0.8,46.064:1" --ramp 7.757 \
   --lyrics "$LRC" --lyrics-offset 0 --tags examples/arcane/arcane_tags.json \
