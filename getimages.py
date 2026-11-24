@@ -10,6 +10,7 @@ The images are copyrighted by FromSoftware and Bandai Namco. Use them for person
 fan edits only, and don't commit them to a public repo: images/ is gitignored.
 
     python getimages.py                  # -> images/elden_ring/<category>/*.jpg
+    python getimages.py --wiki arcane    # -> images/arcane/stills/*.jpg (any Fandom wiki's episode stills)
     python getimages.py --max-size 1920
 
 The network must allow eldenring.fandom.com, static.wikia.nocookie.net,
@@ -71,6 +72,25 @@ def wiki_images():
         yield category(i["name"]), re.sub(r"[^A-Za-z0-9._-]+", "_", name)[:90], i["url"]
 
 
+SKIP_STILLS = r"model|head|concept|profile|banner|background|icon|logo|render|sprite|_face"
+
+
+def wiki_stills(wiki):
+    """Any Fandom wiki: widescreen episode stills (>=1200px wide, ~16:9 to 2.4:1)."""
+    api, cont, out = f"https://{wiki}.fandom.com/api.php", {}, []
+    while True:
+        q = dict(action="query", list="allimages", aiminsize=60000, ailimit=500, aiprop="url|size",
+                 format="json", **cont)
+        d = json.loads(get(api + "?" + urllib.parse.urlencode(q)))
+        out += d["query"]["allimages"]
+        if "continue" not in d:
+            break
+        cont = {"aicontinue": d["continue"]["aicontinue"]}
+    for i in out:
+        if i["width"] >= 1200 and 1.6 < i["width"] / i["height"] < 2.6 and not re.search(SKIP_STILLS, i["name"], re.I):
+            yield "stills", re.sub(r"[^A-Za-z0-9._-]+", "_", Path(i["name"]).stem)[:90], i["url"]
+
+
 def steam_images():
     for tag, app in STEAM_APPS.items():
         d = json.loads(get(f"https://store.steampowered.com/api/appdetails?appids={app}"))[str(app)]["data"]
@@ -86,10 +106,12 @@ def is_design_sheet(img):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", default="images/elden_ring")
+    ap.add_argument("--wiki", default="eldenring",
+                    help="eldenring (art + Steam), or any Fandom wiki name for its episode stills, e.g. arcane")
+    ap.add_argument("--out", default=None, help="default: images/<wiki>")
     ap.add_argument("--max-size", type=int, default=2560, help="longest side in px")
     a = ap.parse_args()
-    out = Path(a.out)
+    out = Path(a.out or ("images/elden_ring" if a.wiki == "eldenring" else f"images/{a.wiki}"))
 
     def fetch(job):
         cat, name, url = job
@@ -112,7 +134,7 @@ def main():
         cv2.imwrite(str(dest), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
         return "ok"
 
-    jobs = list(wiki_images()) + list(steam_images())
+    jobs = (list(wiki_images()) + list(steam_images())) if a.wiki == "eldenring" else list(wiki_stills(a.wiki))
     print(len(jobs), "images to fetch")
     with ThreadPoolExecutor(8) as ex:
         results = list(ex.map(fetch, jobs))
