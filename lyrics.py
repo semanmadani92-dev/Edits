@@ -130,12 +130,14 @@ def validate(plan, min_gap_shots=6):
     return warns
 
 
-def lyric_captions(lines, offset, total, y=0.74):
-    """Caption entries (captions.py format) for every lyric line inside the edit window."""
+def lyric_captions(lines, offset, total, y=0.72, kinetic=True, big_at=None, keywords=()):
+    """Caption entries (captions.py format) for every lyric line inside the edit window.
+    kinetic: words pop in one by one (gold while fresh). big_at: song time of a line to make huge."""
     items = []
     for i, (s, txt) in enumerate(lines):
         end = lines[i + 1][0] if i + 1 < len(lines) else s + 4
         a, b = s - offset, min(end, s + 6) - offset - 0.1
         if b > 0.3 and a < total - 0.3:
-            items.append(dict(start=max(0.0, a), end=min(total, b), text=txt, y=y, plain=True))
+            items.append(dict(start=max(0.0, a), end=min(total, b), text=txt, y=y, plain=True, kinetic=kinetic,
+                              big=big_at is not None and abs(s - big_at) < 0.5, keywords=list(keywords)))
     return items

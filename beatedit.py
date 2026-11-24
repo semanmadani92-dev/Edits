@@ -36,6 +36,48 @@ def detect_beats(audio, start, duration):
     return float(np.atleast_1d(tempo)[0]), times, strength, len(y) / sr
 
 
+def grid_beats(spec, start, duration, accent_mod=2, accent_rem=1):
+    """Beats from a known tempo grid instead of audio: spec 'BPM,PHASE' (PHASE = song time of a beat).
+    Beats whose index % accent_mod == accent_rem are accents (kick) -> strength 1.0, others 0.6."""
+    bpm, phase = (float(x) for x in spec.split(","))
+    P = 60.0 / bpm
+    n0 = int(np.ceil((start - phase) / P))
+    times, strength = [], []
+    n = n0
+    while phase + n * P < start + duration:
+        times.append(phase + n * P - start)
+        strength.append(1.0 if n % accent_mod == accent_rem else 0.6)
+        n += 1
+    return bpm, np.array(times), np.array(strength), float(duration)
+
+
+def parse_curve(spec):
+    """'0:0.15,7.76:1,23.3:0.9' -> sorted [(t, value)] (piecewise constant)."""
+    pts = sorted((float(a), float(b)) for a, b in (p.split(":") for p in spec.split(",")))
+    return pts
+
+
+def curve_at(pts, t):
+    v = pts[0][1]
+    for ti, vi in pts:
+        if t >= ti:
+            v = vi
+    return v
+
+
+def radial_blur(frame, amount, steps=5):
+    """Zoom blur: average of progressively scaled copies (velocity / whoosh feel)."""
+    if amount < 0.01:
+        return frame
+    h, w = frame.shape[:2]
+    acc = frame.astype(np.float32)
+    for i in range(1, steps):
+        z = 1 + amount * i / steps
+        M = cv2.getRotationMatrix2D((w / 2, h / 2), 0, z)
+        acc += cv2.warpAffine(frame, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    return (acc / steps).astype(np.uint8)
+
+
 # ---------------------------------------------------------------- media
 def cover(img, w, h):
     """Resize + centre-crop to fill w x h."""
@@ -223,11 +265,20 @@ def main():
                          "(Elden Ring / soulslike edit look)")
     ap.add_argument("--fade", type=float, default=None, help="fade in/out from black (s)")
     ap.add_argument("--crf", type=int, default=23, help="quality: lower = better + bigger file")
+    ap.add_argument("--grid", help="'BPM,PHASE': use a known beat grid instead of detecting beats "
+                                   "(audio may then be 'none' for a silent render)")
+    ap.add_argument("--accent", default="2,1", help="with --grid: 'MOD,REM' beats that are accents (kick)")
+    ap.add_argument("--intensity", help="energy curve 't:v,...' (0-1). Low = long calm shots, no shake; "
+                                        "high = every-beat cuts, shake, glitch, zoom-whoosh transitions")
+    ap.add_argument("--ramp", type=float, default=None, help="time (s) of the big ramp/drop hit")
+    ap.add_argument("--whoosh", type=float, default=0.0, help="zoom-whoosh transition strength (try 0.25)")
     ap.add_argument("--lyrics", help=".lrc time-synced lyrics (e.g. from lrclib.net) for lyric-matched shots")
     ap.add_argument("--lyrics-offset", type=float, default=None,
                     help="song time (s) where this edit's audio starts, for the lyrics (default: --start)")
     ap.add_argument("--tags", help='JSON {"image.jpg": ["wind","trees",...]} used to match images to lyrics')
-    ap.add_argument("--lyric-captions", action="store_true", help="show the lyric lines on screen")
+    ap.add_argument("--lyric-captions", action="store_true", help="show the lyric lines on screen (word-by-word)")
+    ap.add_argument("--lyric-keywords", default="", help="comma list of words that stay gold on screen")
+    ap.add_argument("--end-card", help="image filename (or part of it) that must be the final shot, e.g. a title card")
     ap.add_argument("--plan-out", help="write the shot plan (time, image, lyric, why) to JSON and stop")
     ap.add_argument("--plan-in", help="render this (possibly hand-edited) shot plan JSON")
     ap.add_argument("--captions", help="JSON file of timed quotes/titles (+ optional voice lines), see captions.py")
@@ -246,10 +297,27 @@ def main():
     if a.order == "shuffle":
         rng.shuffle(files)
 
-    tempo, beats, strength, total = detect_beats(a.audio, a.start, a.duration)
+    if a.grid:
+        am, ar = (int(x) for x in a.accent.split(","))
+        tempo, beats, strength, total = grid_beats(a.grid, a.start, a.duration, am, ar)
+    else:
+        tempo, beats, strength, total = detect_beats(a.audio, a.start, a.duration)
     print(f"tempo ≈ {tempo:.1f} BPM, {len(beats)} beats over {total:.1f}s, {len(files)} media files")
+    curve = parse_curve(a.intensity) if a.intensity else None
+    I = (lambda t: curve_at(curve, t)) if curve else (lambda t: 1.0)
     cuts, count = [0.0], 0
-    for t, s in zip(beats, strength):
+    if curve:  # intensity decides the cut rate: <0.4 every bar, <0.95 every 2 beats, else every beat
+        P = float(np.median(np.diff(beats))) if len(beats) > 1 else 0.5
+        for t, s in zip(beats, strength):
+            v = I(t + 1e-3)
+            step = 4 if v < 0.4 else (2 if v < 0.95 else 1)
+            forced = a.ramp is not None and abs(t - a.ramp) < 0.02
+            if t < 0.15 or total - t < 0.3:
+                continue
+            on_accent = s >= 0.99 or step == 1  # slower cut rates land on the kick
+            if forced or (on_accent and t - cuts[-1] >= step * P - 0.05):
+                cuts.append(round(float(t), 3))
+    for t, s in ([] if curve else zip(beats, strength)):
         if s < a.cut_threshold or t < 0.15:
             continue
         count += 1
@@ -260,7 +328,8 @@ def main():
     import lyrics as lyr
     lines = lyr.parse_lrc(a.lyrics) if a.lyrics else None
     loff = a.start if a.lyrics_offset is None else a.lyrics_offset
-    extra = lyr.lyric_captions(lines, loff, total) if (lines and a.lyric_captions) else []
+    extra = lyr.lyric_captions(lines, loff, total, big_at=(a.ramp + loff - 0.7) if a.ramp is not None else None,
+                               keywords=[k.lower() for k in a.lyric_keywords.split(",") if k]) if (lines and a.lyric_captions) else []
     caps = None
     if a.captions or extra:
         from captions import Captions
@@ -278,7 +347,11 @@ def main():
         plan = _json.loads(Path(a.plan_in).read_text())["shots"]
         cuts = [p["start"] for p in plan] + [plan[-1]["end"]]
     else:
-        plan = lyr.plan_shots(cuts, files, lines, loff, lyr.load_tags(a.tags, files) if (lines or a.tags) else None)
+        end = [f for f in files if a.end_card and a.end_card in f.name][:1]
+        pool = [f for f in files if f not in end] or files
+        plan = lyr.plan_shots(cuts, pool, lines, loff, lyr.load_tags(a.tags, pool) if (lines or a.tags) else None)
+        if end:
+            plan[-1].update(file=str(end[0]), reason="end card", matched=[])
     for wmsg in lyr.validate(plan):
         print("  warning:", wmsg)
     if a.plan_out:
@@ -299,8 +372,8 @@ def main():
     enc = subprocess.Popen([
         "ffmpeg", "-y", "-v", "error",
         "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}", "-r", str(a.fps), "-i", "-",
-        "-ss", str(a.start), "-t", f"{total:.3f}", "-i", a.audio, *v_inputs,
-        *amap, "-c:v", "libx264", "-preset", "medium", "-movflags", "+faststart", "-crf", str(a.crf),
+        *([] if a.audio == "none" else ["-ss", str(a.start), "-t", f"{total:.3f}", "-i", a.audio]), *v_inputs,
+        *(["-map", "0:v", "-an"] if a.audio == "none" else amap), "-c:v", "libx264", "-preset", "medium", "-movflags", "+faststart", "-crf", str(a.crf),
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-shortest", a.out],
         stdin=subprocess.PIPE)
 
@@ -328,20 +401,34 @@ def main():
                 bi = len(past) - 1
                 dt = (fi - past[-1]) / a.fps
                 s = strength[bi]
-                env = s * np.exp(-dt / 0.15)
-                zoom = a.punch * (0.5 + 0.5 * s) * np.exp(-dt / 0.12)
-                if a.shake > 0:  # damped oscillation in a random direction per beat
+                iv = I(fi / a.fps)
+                if a.ramp is not None and 0 <= fi / a.fps - a.ramp < 0.6:
+                    s, iv = 1.0, 1.6  # the drop hits harder than anything else
+                env = s * np.exp(-dt / 0.15) * min(1.0, iv)
+                zoom = a.punch * (0.5 + 0.5 * s) * np.exp(-dt / 0.12) * max(0.25, iv)
+                if a.shake > 0 and iv >= 0.4:  # damped oscillation in a random direction per beat
                     p1, p2, p3 = beat_dirs[bi]
-                    e = a.shake * (0.3 + 0.7 * s) * np.exp(-dt / 0.14)
+                    e = a.shake * (0.3 + 0.7 * s) * np.exp(-dt / 0.14) * iv
                     dx = e * 0.02 * w * np.sin(2 * np.pi * 9 * dt + p1)
                     dy = e * 0.02 * w * np.sin(2 * np.pi * 11 * dt + p2)
                     rot = e * 1.2 * np.sin(2 * np.pi * 7 * dt + p3)
                     zoom += e * 0.045  # hide edges
-                if a.glitch > 0 and s >= a.glitch_threshold and dt < 0.2:
+                if a.glitch > 0 and s >= a.glitch_threshold and dt < 0.2 and iv >= 0.8:
                     gl = a.glitch * (0.6 + 0.4 * s) * (1 - dt / 0.2) * (fx_rng.random() < 0.85)
             tt = fi / a.fps
             if caps:  # title cards ride the shake/glitch
                 frame = caps.draw(frame.copy(), tt, "title", env)
+            if a.whoosh > 0 and I(fi / a.fps) >= 0.6:  # zoom-whoosh into / out of each cut
+                wn = max(2, int(0.12 * a.fps))
+                into, outof = n - 1 - i, i
+                if into < wn and k < len(cut_frames) - 2:
+                    q = 1 - into / wn
+                    zoom += a.whoosh * q * q
+                    frame = radial_blur(frame, 0.12 * q)
+                elif outof < wn and k > 0:
+                    q = 1 - outof / wn
+                    zoom += a.whoosh * q * q
+                    frame = radial_blur(frame, 0.12 * q)
             frame = glitch(transform(frame, zoom, dx, dy, rot), gl, fx_rng)
             if style:
                 frame = style(frame, fi / a.fps, env)
@@ -349,8 +436,9 @@ def main():
             if k > 0 and prev_tail is not None and i < xf:  # crossfade from previous segment
                 al = (i + 1) / (xf + 1)
                 out = out * al + prev_tail.astype(np.float32) * (1 - al)
-            if k > 0 and a.flash > 0:  # flash on cut
-                fl = a.flash * np.exp(-i / (0.06 * a.fps))
+            if k > 0 and a.flash > 0:  # flash on cut (scaled by intensity; huge on the ramp)
+                boost = 2.8 if (a.ramp is not None and abs(cuts[k] - a.ramp) < 0.05) else max(0.0, I(cuts[k] + 1e-3))
+                fl = min(0.95, a.flash * boost) * np.exp(-i / (0.06 * a.fps * (2.5 if boost > 2 else 1)))
                 out = out + (255 - out) * fl
             if caps:  # quotes stay steady and readable
                 out = caps.draw(np.clip(out, 0, 255).astype(np.uint8), tt, "quote").astype(np.float32)

@@ -7,7 +7,7 @@
 set -e
 cd "$(dirname "$0")/../.."
 SONG=${SONG:-music/Medusa.mp3}
-[ -f "$SONG" ] || { echo "Put the song at $SONG (or run with SONG=path/to/song.mp3)"; exit 1; }
+[ "$SONG" = none ] || [ -f "$SONG" ] || { echo "Put the song at $SONG (or run with SONG=path/to/song.mp3)"; exit 1; }
 ART=images/arcane
 SEQ=$(mktemp -d)
 trap 'rm -r -- "${SEQ:?}"' EXIT

@@ -121,6 +121,54 @@ def _title_sprite(text, w):
     return _sprite(draw, (W, H), glow_color=(255, 170, 60), glow=int(size * 0.18), shadow=int(size * 0.12))
 
 
+def _word_sprite(word, size, color):
+    f = _font("Cinzel.ttf", size, "Black")
+    W, H = int(f.getlength(word) + size), int(size * 1.7)
+
+    def draw(md, cd):
+        md.text((size / 2, size * 0.25), word, font=f, fill=255)
+        cd.text((size / 2, size * 0.25), word, font=f, fill=color)
+
+    return _sprite(draw, (W, H), glow_color=(255, 160, 60) if color == GOLD else None,
+                   glow=int(size * 0.12) if color == GOLD else 0, shadow=max(4, size // 7))
+
+
+def _kinetic_layout(text, w, size):
+    """Word sprites (white + gold) laid out in centred lines; returns list of dicts and block height."""
+    words = text.split()
+    items, lines, cur, cw = [], [], [], 0
+    for wd in words:
+        white, gold = _word_sprite(wd, size, INK), _word_sprite(wd, size, GOLD)
+        ww = white.shape[1] - size * 0.55
+        if cur and cw + ww > w * 0.9:
+            lines.append((cur, cw))
+            cur, cw = [], 0
+        cur.append((wd, white, gold, ww))
+        cw += ww
+    if cur:
+        lines.append((cur, cw))
+    lh = int(size * 1.15)
+    for li, (ln, tot) in enumerate(lines):
+        x = (w - tot) / 2 - size * 0.25
+        for wd, white, gold, ww in ln:
+            items.append(dict(word=wd, white=white, gold=gold, x=int(x), y=li * lh))
+            x += ww
+    return items, lh * len(lines)
+
+
+def _blend_xy(frame, spr, x, y, alpha):
+    H, W = frame.shape[:2]
+    sh, sw = spr.shape[:2]
+    x0, y0, x1, y1 = max(0, x), max(0, y), min(W, x + sw), min(H, y + sh)
+    if x1 <= x0 or y1 <= y0 or alpha <= 0.01:
+        return frame
+    s = spr[y0 - y:y1 - y, x0 - x:x1 - x]
+    a = s[..., 3:4] * alpha
+    region = frame[y0:y1, x0:x1].astype(np.float32)
+    frame[y0:y1, x0:x1] = np.clip(region * (1 - a) + s[..., :3] * a, 0, 255).astype(np.uint8)
+    return frame
+
+
 def _blend(frame, spr, y, alpha):
     H, W = frame.shape[:2]
     sh = spr.shape[0]
@@ -144,6 +192,15 @@ class Captions:
         hl = spec.get("highlight", ["Tarnished"])
         self.items = []
         for c in spec["captions"]:
+            if c.get("kinetic"):
+                size = int(w * (0.105 if c.get("big") else 0.075))
+                words, bh = _kinetic_layout(c["text"], w, size)
+                n = len(words)
+                step = c.get("step") or min(0.32, max(0.12, (c["end"] - c["start"]) * 0.6 / max(1, n)))
+                for i, wd in enumerate(words):
+                    wd["t"] = c["start"] + i * step
+                self.items.append(dict(c, words=words, block_h=bh, kind="kinetic", size=size))
+                continue
             if "title" in c:
                 spr, kind = _title_sprite(c["title"], w), "title"
             else:
@@ -151,6 +208,8 @@ class Captions:
             self.items.append(dict(c, sprite=spr, kind=kind))
 
     def draw(self, frame, t, kind, beat_env=0.0):
+        if kind == "quote":
+            frame = self._draw_kinetic(frame, t)
         for c in self.items:
             if c["kind"] != kind or not (c["start"] <= t <= c["end"]):
                 continue
@@ -168,6 +227,27 @@ class Captions:
                 y = int(self.h * c.get("y", 0.44)) - spr.shape[0] // 2
                 a *= min(1.0, 0.85 + 0.3 * beat_env)
             frame = _blend(frame, spr, y, a)
+        return frame
+
+    def _draw_kinetic(self, frame, t):
+        for c in self.items:
+            if c["kind"] != "kinetic" or not (c["start"] <= t <= c["end"]):
+                continue
+            fade = min(1.0, (c["end"] - t) / 0.25)
+            top = int(self.h * c.get("y", 0.7)) - c["block_h"] // 2
+            for wd in c["words"]:
+                age = t - wd["t"]
+                if age < 0:
+                    break
+                k = 1 + 0.22 * max(0.0, 1 - age / 0.14) ** 2          # pop: big -> settle
+                spr = wd["gold"] if age < 0.3 or wd["word"].strip(".,!?").lower() in c.get("keywords", ()) else wd["white"]
+                if k > 1.01:
+                    spr = cv2.resize(spr, None, fx=k, fy=k, interpolation=cv2.INTER_LINEAR)
+                sh, sw = spr.shape[:2]
+                cx = wd["x"] + wd["white"].shape[1] // 2
+                cy = top + wd["y"] + wd["white"].shape[0] // 2
+                a = min(1.0, age / 0.06) * fade
+                frame = _blend_xy(frame, spr, cx - sw // 2, cy - sh // 2, a)
         return frame
 
     # ---------------------------------------------------------- audio

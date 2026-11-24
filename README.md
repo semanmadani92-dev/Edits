@@ -58,6 +58,13 @@ python getmusic.py search epic               # ~8,800 public-domain tracks, no c
 ```
 **Charting/copyrighted songs, free:** use Apple's free 30-second preview to time the edit, and LRCLIB for synced lyrics. Then add the song from TikTok's or Instagram's free in-app music library when you post, because those are licensed for the platform. See `examples/arcane/`.
 
+## How edits are built here (from editing research)
+- **Calm, then build, then drop.** `--intensity "t:v,..."` controls the energy. Low intensity gives long shots (one per bar) with no shake. Medium cuts every 2 beats on the kick. High cuts on every beat, with shake, glitch and zoom-whoosh transitions (`--whoosh`).
+- **One big ramp.** `--ramp T` makes that moment hit hardest: a whiteout flash, a forced cut and extra shake. Put it on the lyric or drop the song is built around.
+- **Every effect needs a reason.** Flashes and shake scale with intensity, glitch only fires on accents at high energy, and the speed-ramp feel comes from zoom-whooshes at the cuts.
+- **Lyrics as beats.** `--lyric-captions` pops words in one at a time, with each fresh word gold and `--lyric-keywords` staying gold. The ramp line is drawn bigger.
+- **No audio needed.** `--grid BPM,PHASE` builds the cuts from a known beat grid, and `none` as the song renders silently, so you can add the licensed song inside TikTok or Instagram.
+
 ## Lyric-matched shots and plan review
 ```
 python beatedit.py song.wav images/ --lyrics song.lrc --tags tags.json --plan-out plan.json   # review the plan
